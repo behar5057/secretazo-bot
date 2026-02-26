@@ -1,0 +1,15 @@
+services:
+  - type: worker
+    name: secretazo-bot
+    runtime: python
+    repo: https://github.com/YOUR_USERNAME/secretazo-bot
+    plan: free
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: CHANNEL_USERNAME
+        sync: false
+      - key: ADMIN_USER_ID
+        sync: false
+    buildCommand: pip install -r requirements.txt
+    startCommand: python src/bot.py
