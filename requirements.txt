@@ -1,0 +1,6 @@
+python-telegram-bot==20.7
+python-dotenv==1.0.0
+aiofiles==23.2.1
+Pillow==10.1.0
+gunicorn==21.2.0
+flask==3.0.0  # للـ web service على Render
