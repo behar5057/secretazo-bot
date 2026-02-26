@@ -1,5 +1,5 @@
 .env
-database/*.db
+database/
 __pycache__/
 *.pyc
 .git
