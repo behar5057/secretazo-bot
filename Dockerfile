@@ -2,7 +2,6 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# تثبيت متطلبات النظام التي يحتاجها Pillow
 RUN apt-get update && apt-get install -y \
     gcc \
     python3-dev \
@@ -13,6 +12,8 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# هذه هي التغييرة المهمة - نسخ كل المحتوى بما في ذلك مجلد src
 COPY . .
 
-CMD ["python", "src/bot.py"]
+# التأكد من المسار الصحيح
+CMD ["python", "-m", "src.bot"]
