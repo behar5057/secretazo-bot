@@ -1,14 +1,22 @@
+import os
+import asyncio
 import logging
+from starlette.applications import Starlette
+from starlette.responses import Response, PlainTextResponse
+from starlette.routing import Route
+import uvicorn
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import os
-from datetime import datetime
 import sqlite3
+from datetime import datetime
 
-# التوكن من المتغيرات البيئية
+# التوكن والمتغيرات
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-CHANNEL_USERNAME = os.getenv('CHANNEL_USERNAME')  # يجب أن يكون معرف القناة الصحيح
-ADMIN_USER_ID = int(os.getenv('ADMIN_USER_ID', '0')) # قد لا نحتاجه الآن ولكن يمكن تركه
+CHANNEL_USERNAME = os.getenv('CHANNEL_USERNAME')
+ADMIN_USER_ID = int(os.getenv('ADMIN_USER_ID', '0'))
+# Render بيعطي الرابط ده تلقائياً
+RENDER_URL = os.getenv('RENDER_EXTERNAL_URL')
+PORT = int(os.getenv('PORT', 8000))
 
 # إعداد التسجيل
 logging.basicConfig(
@@ -23,7 +31,7 @@ WELCOME_MESSAGE = """
 
 Share your secrets anonymously 🤫
 
-✨ *New: Your message is posted directly to the channel!*
+✨ *Your message is posted directly to the channel!*
 
 How it works:
 1️⃣ Send your message (text, photo, video)
@@ -32,7 +40,7 @@ How it works:
 Your identity stays secret forever!
 """
 
-# قاعدة بيانات بسيطة (اختياري لتتبع المنشورات)
+# قاعدة بيانات بسيطة
 class Database:
     def __init__(self):
         os.makedirs('database', exist_ok=True)
@@ -63,29 +71,18 @@ class Database:
 
 db = Database()
 
-# وظيفة مساعدة لتحويل مدخلات القناة
-async def get_channel_id(channel_input):
-    if str(channel_input).startswith('-100'):
-        return int(channel_input)
-    else:
-        return channel_input
-
-# أوامر المستخدمين
+# دوال البوت
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """رسالة البدء"""
     await update.message.reply_text(WELCOME_MESSAGE)
 
 async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """استقبال رسائل المستخدمين ونشرها مباشرة في القناة"""
     user_id = update.effective_user.id
     message = update.message
     
-    # تجهيز المعلومات
     msg_type = 'text'
     file_id = None
     content = ""
     
-    # تحديد نوع الرسالة
     if message.text:
         content = message.text
         msg_type = 'text'
@@ -97,23 +94,15 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         content = message.caption or "🎥 Video"
         msg_type = 'video'
         file_id = message.video.file_id
-    elif message.voice:
-        content = "🎤 Voice message"
-        msg_type = 'voice'
-        file_id = message.voice.file_id
     else:
         await message.reply_text("❌ This type is not supported. Please send text, photo, or video.")
         return
     
-    # نص النشر في القناة
     channel_text = f"🤫 Anonymous Secret\n\n{content}\n\n---\n💫 Share your secret: @SecretAzo_bot"
     
     try:
-        # الحصول على ID القناة بالصيغة الصحيحة
-        channel_id = await get_channel_id(CHANNEL_USERNAME)
-        channel_message = None
+        channel_id = int(CHANNEL_USERNAME) if CHANNEL_USERNAME.startswith('-100') else CHANNEL_USERNAME
         
-        # نشر في القناة حسب النوع
         if msg_type == 'text':
             channel_message = await context.bot.send_message(
                 chat_id=channel_id,
@@ -131,62 +120,51 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
                 video=file_id,
                 caption=channel_text
             )
-        elif msg_type == 'voice' and file_id:
-            channel_message = await context.bot.send_voice(
-                chat_id=channel_id,
-                voice=file_id,
-                caption=channel_text
-            )
         
-        # حفظ في قاعدة البيانات (اختياري)
         if channel_message:
             db.add_published(user_id, content, msg_type, file_id, channel_message.message_id)
         
-        # إشعار المستخدم بالنجاح
         await message.reply_text("✅ Your secret has been published to the channel!")
-        logger.info(f"Published message from user {user_id} to channel {CHANNEL_USERNAME}")
         
     except Exception as e:
-        logger.error(f"Error publishing to channel: {e}")
-        # إرسال رسالة خطأ للمستخدم
-        await message.reply_text(f"❌ Sorry, there was an error publishing your secret. Please try again later.")
-        # إرسال تقرير الخطأ للمشرف (اختياري)
-        if ADMIN_USER_ID:
-            try:
-                await context.bot.send_message(
-                    chat_id=ADMIN_USER_ID,
-                    text=f"⚠️ Failed to publish message from user {user_id}.\nError: {str(e)}"
-                )
-            except:
-                pass
+        logger.error(f"Error publishing: {e}")
+        await message.reply_text("❌ Sorry, there was an error. Please try again later.")
 
-# أمر إحصائيات للمشرف
-async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_USER_ID:
-        return
+# الإعداد الرئيسي للـ Webhook
+async def main():
+    # بناء تطبيق telegram
+    telegram_app = Application.builder().token(BOT_TOKEN).updater(None).build()
+    telegram_app.add_handler(CommandHandler("start", start))
+    telegram_app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_user_message))
     
-    published_count = db.conn.execute('SELECT COUNT(*) FROM published_messages').fetchone()[0]
-    stats_text = f"📊 SecretAzo Statistics\n\n✅ Total published: {published_count}"
-    await update.message.reply_text(stats_text)
+    # تعيين webhook
+    webhook_url = f"{RENDER_URL}/telegram"
+    await telegram_app.bot.set_webhook(webhook_url, allowed_updates=Update.ALL_TYPES)
+    logger.info(f"Webhook set to {webhook_url}")
+    
+    # إعداد Starlette server
+    async def telegram(request):
+        update = Update.de_json(await request.json(), telegram_app.bot)
+        await telegram_app.update_queue.put(update)
+        return Response()
+    
+    async def health(_):
+        return PlainTextResponse("ok")
+    
+    starlette_app = Starlette(routes=[
+        Route("/telegram", telegram, methods=["POST"]),
+        Route("/healthcheck", health, methods=["GET"]),
+        Route("/", health, methods=["GET"]),  # الصفحة الرئيسية
+    ])
+    
+    # تشغيل السيرفر
+    config = uvicorn.Config(app=starlette_app, host="0.0.0.0", port=PORT)
+    server = uvicorn.Server(config)
+    
+    async with telegram_app:
+        await telegram_app.start()
+        await server.serve()
+        await telegram_app.stop()
 
-# تشغيل البوت
-def main():
-    application = Application.builder().token(BOT_TOKEN).build()
-    
-    # أوامر المستخدمين
-    application.add_handler(CommandHandler("start", start))
-    
-    # أوامر المشرف
-    if ADMIN_USER_ID:
-        application.add_handler(CommandHandler("stats", admin_stats))
-    
-    # معالج الرسائل
-    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_user_message))
-    
-    print("🤫 SecretAzo Bot (Direct Post Mode) is starting...")
-    print(f"🤖 Bot is running! Posts will go directly to: {CHANNEL_USERNAME}")
-    
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    asyncio.run(main())
