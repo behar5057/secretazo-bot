@@ -18,22 +18,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# رسائل البوت (للمستخدمين فقط)
+# رسائل البوت (للمستخدمين فقط) - بدون Markdown
 WELCOME_MESSAGE = """
-🎭 *Welcome to SecretAzo!*
+🎭 Welcome to SecretAzo!
 
 Share your secrets anonymously 🤫
 
-*How it works:*
+How it works:
 1️⃣ Send your message (text, photo, video)
 2️⃣ We review it
 3️⃣ Gets posted anonymously to our channel
 
-✨ *Your identity stays secret forever!*
+✨ Your identity stays secret forever!
 """
 
 RECEIVED_MESSAGE = """
-✅ *Your secret has been received!*
+✅ Your secret has been received!
 
 We'll review it and post it in our channel if approved.
 You'll get a notification when it's live.
@@ -100,7 +100,7 @@ db = Database()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """رسالة البدء - للمستخدمين فقط"""
-    await update.message.reply_text(WELCOME_MESSAGE, parse_mode='Markdown')
+    await update.message.reply_text(WELCOME_MESSAGE)
 
 async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """استقبال رسائل المستخدمين"""
@@ -141,18 +141,18 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     # إرسال للمشرف (بدون ما يشوف المستخدم)
     await send_to_admin(context, msg_id, user_id, content, msg_type, file_id, caption)
     
-    # تأكيد للمستخدم فقط (بدون أي تفاصيل عن المشرف)
-    await message.reply_text(RECEIVED_MESSAGE, parse_mode='Markdown')
+    # تأكيد للمستخدم فقط
+    await message.reply_text(RECEIVED_MESSAGE)
 
-# ========== وظائف المشرف (سرية تماماً) ==========
+# ========== وظائف المشرف ==========
 
 async def send_to_admin(context, msg_id, user_id, content, msg_type, file_id, caption):
     """إرسال الرسالة للمشرف فقط"""
     
-    # نص الرسالة للمشرف (ما يشوفه إلا المشرف)
-    admin_text = f"🔐 *New Secret to Review* 🔐\n\n"
-    admin_text += f"🆔 ID: `{msg_id}`\n"
-    admin_text += f"👤 User: `{user_id}`\n"
+    # نص الرسالة للمشرف
+    admin_text = f"🔐 New Secret to Review 🔐\n\n"
+    admin_text += f"🆔 ID: {msg_id}\n"
+    admin_text += f"👤 User: {user_id}\n"
     admin_text += f"📝 Content:\n{content}\n"
     
     # أزرار التحكم
@@ -170,7 +170,6 @@ async def send_to_admin(context, msg_id, user_id, content, msg_type, file_id, ca
             await context.bot.send_message(
                 chat_id=ADMIN_USER_ID,
                 text=admin_text,
-                parse_mode='Markdown',
                 reply_markup=reply_markup
             )
         elif msg_type == 'photo' and file_id:
@@ -178,7 +177,6 @@ async def send_to_admin(context, msg_id, user_id, content, msg_type, file_id, ca
                 chat_id=ADMIN_USER_ID,
                 photo=file_id,
                 caption=admin_text,
-                parse_mode='Markdown',
                 reply_markup=reply_markup
             )
         elif msg_type == 'video' and file_id:
@@ -186,7 +184,6 @@ async def send_to_admin(context, msg_id, user_id, content, msg_type, file_id, ca
                 chat_id=ADMIN_USER_ID,
                 video=file_id,
                 caption=admin_text,
-                parse_mode='Markdown',
                 reply_markup=reply_markup
             )
         elif msg_type == 'voice' and file_id:
@@ -194,14 +191,13 @@ async def send_to_admin(context, msg_id, user_id, content, msg_type, file_id, ca
                 chat_id=ADMIN_USER_ID,
                 voice=file_id,
                 caption=admin_text,
-                parse_mode='Markdown',
                 reply_markup=reply_markup
             )
     except Exception as e:
         logger.error(f"Error sending to admin: {e}")
 
 async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة قرارات المشرف (ما يشوفها المستخدم)"""
+    """معالجة قرارات المشرف"""
     query = update.callback_query
     await query.answer()
     
@@ -223,37 +219,33 @@ async def approve_secret(query, context, msg_id):
         await query.edit_message_text("❌ Secret not found!")
         return
     
-    # نص النشر في القناة (بدون أي معلومات عن المرسل)
-    channel_text = f"🤫 *Anonymous Secret*\n\n{message[2]}\n\n_---_\n💫 Share your secret: @SecretAzo_bot"
+    # نص النشر في القناة - بدون Markdown
+    channel_text = f"🤫 Anonymous Secret\n\n{message[2]}\n\n---\n💫 Share your secret: @SecretAzo_bot"
     
     try:
         # نشر في القناة
         if message[3] == 'text':
             sent = await context.bot.send_message(
                 chat_id=CHANNEL_USERNAME,
-                text=channel_text,
-                parse_mode='Markdown'
+                text=channel_text
             )
         elif message[3] == 'photo' and message[4]:
             sent = await context.bot.send_photo(
                 chat_id=CHANNEL_USERNAME,
                 photo=message[4],
-                caption=channel_text,
-                parse_mode='Markdown'
+                caption=channel_text
             )
         elif message[3] == 'video' and message[4]:
             sent = await context.bot.send_video(
                 chat_id=CHANNEL_USERNAME,
                 video=message[4],
-                caption=channel_text,
-                parse_mode='Markdown'
+                caption=channel_text
             )
         elif message[3] == 'voice' and message[4]:
             sent = await context.bot.send_voice(
                 chat_id=CHANNEL_USERNAME,
                 voice=message[4],
-                caption=channel_text,
-                parse_mode='Markdown'
+                caption=channel_text
             )
         else:
             await query.edit_message_text("❌ Cannot publish this type of message.")
@@ -266,15 +258,14 @@ async def approve_secret(query, context, msg_id):
         # إشعار المشرف فقط
         await query.edit_message_text(f"✅ Secret {msg_id} published to channel!")
         
-        # إشعار المستخدم (بدون أي تفاصيل)
+        # إشعار المستخدم
         try:
             await context.bot.send_message(
                 chat_id=message[1],
-                text="🎉 *Your secret has been published!*\n\nCheck out our channel: " + CHANNEL_USERNAME,
-                parse_mode='Markdown'
+                text=f"🎉 Your secret has been published!\n\nCheck out our channel: {CHANNEL_USERNAME}"
             )
         except:
-            pass  # المستخدم ربما حظر البوت
+            pass
     
     except Exception as e:
         logger.error(f"Error publishing: {e}")
@@ -299,7 +290,7 @@ async def reject_secret(query, msg_id):
     
     await query.edit_message_text(f"❌ Secret {msg_id} rejected")
 
-# ========== أوامر المشرف (ما يشوفها إلا المشرف) ==========
+# ========== أوامر المشرف ==========
 
 async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """إحصائيات للمشرف فقط"""
@@ -311,11 +302,11 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pending_count = db.conn.execute('SELECT COUNT(*) FROM pending_messages').fetchone()[0]
     published_count = db.conn.execute('SELECT COUNT(*) FROM published_messages').fetchone()[0]
     
-    stats_text = f"📊 *SecretAzo Statistics*\n\n"
+    stats_text = f"📊 SecretAzo Statistics\n\n"
     stats_text += f"⏳ Pending: {pending_count}\n"
     stats_text += f"✅ Published: {published_count}\n"
     
-    await update.message.reply_text(stats_text, parse_mode='Markdown')
+    await update.message.reply_text(stats_text)
 
 # ========== تشغيل البوت ==========
 
@@ -327,18 +318,16 @@ def main():
     # أوامر المستخدمين
     application.add_handler(CommandHandler("start", start))
     
-    # أوامر المشرف (محمية)
+    # أوامر المشرف
     application.add_handler(CommandHandler("stats", admin_stats))
     
     # معالجات الرسائل
     application.add_handler(CallbackQueryHandler(admin_callback, pattern='^(approve_|reject_)'))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_user_message))
     
-    # معلومات التشغيل (تظهر فقط في سجلات Render، وليس للمستخدمين)
+    # معلومات التشغيل
     print("🤫 SecretAzo Bot is starting...")
     print(f"🤖 Bot is running!")
-    print(f"👤 Admin ID configured: {ADMIN_USER_ID}")
-    print(f"📢 Channel: {CHANNEL_USERNAME}")
     
     # تشغيل البوت
     application.run_polling(allowed_updates=Update.ALL_TYPES)
